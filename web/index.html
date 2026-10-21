@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Continuity</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+</head>
+<body class="bg-zinc-900 text-zinc-100">
+  <main class="mx-auto max-w-2xl p-6 space-y-6">
+    <h1 class="text-2xl font-semibold">Continuity</h1>
+
+    <section class="flex flex-col gap-4 rounded-lg bg-zinc-800 p-4 sm:flex-row sm:items-center">
+      <video id="preview" class="aspect-video w-full rounded bg-black sm:w-64" muted autoplay playsinline controls></video>
+      <div class="min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Now playing</p>
+        <p id="now" class="truncate text-lg">Nothing</p>
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <label id="drop" class="block cursor-pointer rounded-lg border-2 border-dashed border-zinc-600 p-6 text-center hover:border-zinc-400">
+        Drop MP4 files here or click to choose (H.264 + AAC)
+        <input id="file" type="file" accept=".mp4,video/mp4" multiple class="hidden">
+      </label>
+      <ul id="messages" class="space-y-2"></ul>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="text-lg font-semibold">Playlist</h2>
+      <p class="text-sm text-zinc-400">Drag to reorder. Changes take effect at the next clip.</p>
+      <ul id="playlist" class="space-y-2"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
