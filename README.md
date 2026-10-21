@@ -41,13 +41,14 @@ Copy `continuity-pi` to the Pi, install ffmpeg with `sudo apt install ffmpeg`, a
 
 ## Videos
 
-- Uploads must be MP4 files with H.264 video and AAC audio. Anything else is rejected.
+- Uploads must be MP4 files with H.264 video and AAC audio. Anything else, or a file that is cut short, is rejected. Uploads are also rejected if they would leave less than 1 GB free on the disk.
 - Output is always 1920x1080 at 30fps (letterboxed as needed), 4.5 Mbps H.264 and 128 kbps AAC.
 - The play order is stored in `media/playlist.json`, a plain list of filenames.
 - Reorders and deletes take effect when the current clip finishes.
-- With an empty playlist the stream goes idle until a video is uploaded.
-- If the RTMP connection drops, the encoder restarts after 5 seconds.
-- The web page shows a live preview of the output, a few seconds behind. The preview's HLS files are kept in a temporary directory, and if the preview fails the RTMP stream carries on.
+- With an empty playlist the stream shows black until a video is uploaded. A video that can't be played is replaced by a second of black.
+- If the RTMP connection drops, or the encoder outputs nothing for 15 seconds (for example because the RTMP server stopped responding), the encoder restarts after 5 seconds.
+- `media/playlist.json` is replaced atomically on every change. If it is damaged anyway, it is rebuilt from the videos in the media directory.
+- The web page shows a live preview of the output, a few seconds behind. The preview's HLS files are kept in a temporary directory (removed on shutdown), and if the preview fails the RTMP stream carries on. The preview writes about 50 GB a day, so on a Raspberry Pi point `TMPDIR` at a RAM disk such as `/dev/shm` to spare the SD card.
 
 ## How it works
 

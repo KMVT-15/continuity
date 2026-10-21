@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"errors"
 	"flag"
 	"html/template"
 	"io"
@@ -9,8 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,6 +44,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		os.RemoveAll(previewDir)
+		os.Exit(0)
+	}()
 
 	go runPlayout(*output, *encoder, previewDir, playlist)
 
@@ -76,16 +87,30 @@ func main() {
 			c.String(http.StatusBadRequest, "only .mp4 files are accepted")
 			return
 		}
-		path := filepath.Join(*dir, name)
-		if _, err := os.Stat(path); err == nil {
-			c.String(http.StatusConflict, "a video with that name already exists")
+		if _, err := os.Stat(filepath.Join(*dir, name)); err == nil {
+			c.String(http.StatusConflict, errExists.Error())
 			return
 		}
-		if err := saveUpload(c.Request.Body, path); err != nil {
+		space, err := uploadSpace(*dir)
+		if err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+		if c.Request.ContentLength > space {
+			c.String(http.StatusInsufficientStorage, "there isn't enough disk space for this video")
+			return
+		}
+		body := http.MaxBytesReader(c.Writer, c.Request.Body, space)
+		temp, err := saveUpload(body, *dir)
+		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := playlist.Add(name); err != nil {
+		defer os.Remove(temp)
+		if err := playlist.Add(temp, name); errors.Is(err, errExists) {
+			c.String(http.StatusConflict, err.Error())
+			return
+		} else if err != nil {
 			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -94,8 +119,11 @@ func main() {
 
 	router.DELETE("/api/videos/:name", func(c *gin.Context) {
 		name := c.Param("name")
-		if err := playlist.Remove(name); err != nil {
+		if err := playlist.Remove(name); errors.Is(err, errNotFound) {
 			c.String(http.StatusNotFound, err.Error())
+			return
+		} else if err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
 			return
 		}
 		if err := os.Remove(filepath.Join(*dir, name)); err != nil {
@@ -115,24 +143,31 @@ func main() {
 	router.NoRoute(gin.WrapH(http.FileServer(http.FS(files))))
 
 	log.Printf("web interface on %s", *addr)
-	log.Fatal(router.Run(*addr))
+	err = router.Run(*addr)
+	os.RemoveAll(previewDir)
+	log.Fatal(err)
 }
 
-func saveUpload(body io.Reader, path string) error {
-	temp := path + ".upload"
-	defer os.Remove(temp)
-
-	file, err := os.Create(temp)
+// saveUpload saves body to a uniquely named temporary file in dir and checks
+// it's a playable video, returning the file's path.
+func saveUpload(body io.Reader, dir string) (string, error) {
+	file, err := os.CreateTemp(dir, "*.upload")
 	if err != nil {
-		return err
+		return "", err
 	}
 	_, err = io.Copy(file, body)
-	file.Close()
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(file.Name(), 0644)
+	}
+	if err == nil {
+		err = checkVideo(file.Name())
+	}
 	if err != nil {
-		return err
+		os.Remove(file.Name())
+		return "", err
 	}
-	if err := checkVideo(temp); err != nil {
-		return err
-	}
-	return os.Rename(temp, path)
+	return file.Name(), nil
 }

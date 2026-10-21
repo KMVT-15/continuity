@@ -21,10 +21,10 @@ async function load() {
   const res = await fetch("/api/playlist");
   const { videos, playing } = await res.json();
   now.textContent = playing || "Nothing";
-  list.replaceChildren(...videos.map(name => row(name, name === playing)));
+  list.replaceChildren(...videos.map(name => row(name, name === playing, videos.length > 1)));
 }
 
-function row(name, playing) {
+function row(name, playing, deletable) {
   const li = document.createElement("li");
   li.draggable = true;
   li.dataset.name = name;
@@ -44,8 +44,10 @@ function row(name, playing) {
   }
 
   const remove = document.createElement("button");
-  remove.className = tag + " border-zinc-300 text-zinc-600 hover:bg-zinc-100";
+  remove.className = tag + " border-zinc-300 text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
   remove.textContent = "Delete";
+  remove.disabled = !deletable;
+  if (!deletable) remove.title = "The playlist needs at least one video";
   remove.onclick = async () => {
     if (!(await confirmDelete(name))) return;
     await send("DELETE", "/api/videos/" + encodeURIComponent(name));
