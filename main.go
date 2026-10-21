@@ -91,17 +91,11 @@ func main() {
 			c.String(http.StatusConflict, errExists.Error())
 			return
 		}
-		space, err := uploadSpace(*dir)
-		if err != nil {
-			c.String(http.StatusInternalServerError, err.Error())
-			return
-		}
-		if c.Request.ContentLength > space {
+		if c.Request.ContentLength > freeSpace(*dir)-minFreeSpace {
 			c.String(http.StatusInsufficientStorage, "there isn't enough disk space for this video")
 			return
 		}
-		body := http.MaxBytesReader(c.Writer, c.Request.Body, space)
-		temp, err := saveUpload(body, *dir)
+		temp, err := saveUpload(c.Request.Body, *dir)
 		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			return
@@ -143,25 +137,24 @@ func main() {
 	router.NoRoute(gin.WrapH(http.FileServer(http.FS(files))))
 
 	log.Printf("web interface on %s", *addr)
-	err = router.Run(*addr)
-	os.RemoveAll(previewDir)
-	log.Fatal(err)
+	log.Fatal(router.Run(*addr))
 }
 
-// saveUpload saves body to a uniquely named temporary file in dir and checks
-// it's a playable video, returning the file's path.
+const minFreeSpace = 1 << 30
+
+func freeSpace(dir string) int64 {
+	var stat syscall.Statfs_t
+	syscall.Statfs(dir, &stat)
+	return int64(stat.Bavail) * int64(stat.Bsize)
+}
+
 func saveUpload(body io.Reader, dir string) (string, error) {
 	file, err := os.CreateTemp(dir, "*.upload")
 	if err != nil {
 		return "", err
 	}
 	_, err = io.Copy(file, body)
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Chmod(file.Name(), 0644)
-	}
+	file.Close()
 	if err == nil {
 		err = checkVideo(file.Name())
 	}

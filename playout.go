@@ -17,8 +17,6 @@ import (
 
 const outputFPS = 30
 
-// stallTimeout is how long the encoder can go without outputting a frame
-// before it's killed and restarted, e.g. when the RTMP server stops responding.
 const stallTimeout = 15 * time.Second
 
 func runPlayout(output, encoder, previewDir string, playlist *Playlist) {
@@ -60,8 +58,6 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 	ffmpeg := exec.Command("ffmpeg", args...)
 	ffmpeg.Stderr = os.Stderr
 
-	// An os.Pipe rather than StdinPipe, since Wait closes a StdinPipe while
-	// feed may be handing it to the next clip's ffmpeg.
 	input, stdin, err := os.Pipe()
 	if err != nil {
 		return err
@@ -70,7 +66,6 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 	ffmpeg.Stdin = input
 	progress, err := ffmpeg.StdoutPipe()
 	if err != nil {
-		input.Close()
 		return err
 	}
 	err = ffmpeg.Start()
@@ -79,7 +74,7 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 		return err
 	}
 	cues := make(chan cue, 100)
-	go followProgress(progress, cues, playlist, func() { ffmpeg.Process.Kill() })
+	go followProgress(progress, cues, playlist, ffmpeg.Process)
 	exited := make(chan error, 1)
 	go func() { exited <- ffmpeg.Wait() }()
 
@@ -91,8 +86,6 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 		default:
 		}
 
-		// A clip that can't be played is replaced by a second of filler,
-		// so the encoder never runs out of input.
 		path := playlist.Next()
 		var duration time.Duration
 		if path != "" {
@@ -103,21 +96,13 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 			}
 		}
 
-		next := cue{start: offset}
-		if path != "" {
-			log.Printf("queueing %s", path)
-			next.name = filepath.Base(path)
-		}
-		select {
-		case cues <- next:
-		case err := <-exited:
-			return err
-		}
-
 		if path == "" {
+			cues <- cue{start: offset}
 			err = filler(stdin, offset)
 			offset += time.Second
 		} else {
+			log.Printf("queueing %s", path)
+			cues <- cue{start: offset, name: filepath.Base(path)}
 			err = remux(path, duration, stdin, offset)
 			offset += duration
 		}
@@ -132,39 +117,23 @@ type cue struct {
 	name  string
 }
 
-// followProgress updates what's playing from ffmpeg's progress output, and
-// calls stalled if no new frames are output for stallTimeout.
-func followProgress(progress io.Reader, cues <-chan cue, playlist *Playlist, stalled func()) {
-	counts := make(chan int64)
-	go func() {
-		defer close(counts)
-		scanner := bufio.NewScanner(progress)
-		for scanner.Scan() {
-			value, ok := strings.CutPrefix(scanner.Text(), "frame=")
-			if !ok {
-				continue
-			}
-			if frames, err := strconv.ParseInt(value, 10, 64); err == nil {
-				counts <- frames
-			}
-		}
-	}()
+func followProgress(progress io.Reader, cues <-chan cue, playlist *Playlist, encoder *os.Process) {
+	watchdog := time.AfterFunc(stallTimeout, func() {
+		log.Printf("no frames output for %s, killing encoder", stallTimeout)
+		encoder.Kill()
+	})
+	defer watchdog.Stop()
 
 	var pending []cue
 	var last int64
-	watchdog := time.NewTimer(stallTimeout)
-	defer watchdog.Stop()
-	for {
-		var frames int64
-		select {
-		case n, ok := <-counts:
-			if !ok {
-				return
-			}
-			frames = n
-		case <-watchdog.C:
-			log.Printf("no frames output for %s, killing encoder", stallTimeout)
-			stalled()
+	scanner := bufio.NewScanner(progress)
+	for scanner.Scan() {
+		value, ok := strings.CutPrefix(scanner.Text(), "frame=")
+		if !ok {
+			continue
+		}
+		frames, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
 			continue
 		}
 		if frames > last {
@@ -185,9 +154,6 @@ func followProgress(progress io.Reader, cues <-chan cue, playlist *Playlist, sta
 	}
 }
 
-// remux feeds the first duration of the clip at path. Cutting it with -t
-// rather than -shortest keeps the video from running past the end of shorter
-// audio, which leaves the RTMP output waiting for audio.
 func remux(path string, duration time.Duration, dst io.Writer, offset time.Duration) error {
 	return feed(dst, offset,
 		"-i", path,
@@ -252,12 +218,11 @@ func streamSeconds(path, stream string) (float64, error) {
 
 func checkVideo(path string) error {
 	format, err := probe(path, "format=format_name")
-	if err != nil || len(format) == 0 {
+	if err != nil {
 		return errors.New("not a readable video file")
 	}
-	formats := strings.Trim(format[0], `"`)
-	if !slices.Contains(strings.Split(formats, ","), "mp4") {
-		return fmt.Errorf("needs to be an MP4 file, but it's %s", formats)
+	if !strings.Contains(strings.Join(format, ""), "mp4") {
+		return errors.New("needs to be an MP4 file")
 	}
 	codecs, err := probe(path, "stream=codec_name")
 	if err != nil {
@@ -266,14 +231,9 @@ func checkVideo(path string) error {
 	if !slices.Contains(codecs, "h264") || !slices.Contains(codecs, "aac") {
 		return fmt.Errorf("needs H.264 video and AAC audio, but it has %s", strings.Join(codecs, ", "))
 	}
-	if _, err := probeDuration(path); err != nil {
-		return fmt.Errorf("its length can't be read: %v", err)
-	}
-	// Reading every packet without decoding is quick, and catches files
-	// that are cut short, which would otherwise freeze the stream.
-	read := exec.Command("ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", path,
+	readAll := exec.Command("ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", path,
 		"-map", "0:v:0", "-map", "0:a:0", "-c", "copy", "-f", "null", "-")
-	if err := read.Run(); err != nil {
+	if err := readAll.Run(); err != nil {
 		return errors.New("the file is damaged or incomplete")
 	}
 	return nil

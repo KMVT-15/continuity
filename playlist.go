@@ -3,11 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 )
 
@@ -33,74 +31,23 @@ func loadPlaylist(dir string) (*Playlist, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(data, &p.names); err != nil {
-		// e.g. cut short by a power cut before saves were atomic
-		log.Printf("%s is damaged (%v), rebuilding it from the videos in %s", p.file(), err, dir)
-		if p.names, err = videosIn(dir); err != nil {
-			return nil, err
-		}
-		return p, p.save(p.names)
-	}
-	p.names = unique(p.names)
-	return p, nil
-}
-
-func videosIn(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, entry := range entries {
-		if entry.Type().IsRegular() && strings.ToLower(filepath.Ext(entry.Name())) == ".mp4" {
-			names = append(names, entry.Name())
-		}
-	}
-	return names, nil
-}
-
-// unique removes repeated names, which would stop Next from reaching the
-// videos after the second copy.
-func unique(names []string) []string {
-	var out []string
-	for _, name := range names {
-		if !slices.Contains(out, name) {
-			out = append(out, name)
-		}
-	}
-	return out
+	return p, json.Unmarshal(data, &p.names)
 }
 
 func (p *Playlist) file() string {
 	return filepath.Join(p.dir, "playlist.json")
 }
 
-// save writes names to a temporary file and renames it into place, so the
-// playlist file is never left half written.
 func (p *Playlist) save(names []string) error {
 	data, err := json.MarshalIndent(names, "", "  ")
 	if err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(p.dir, "playlist-*.tmp")
-	if err != nil {
+	temp := p.file() + ".tmp"
+	if err := os.WriteFile(temp, data, 0644); err != nil {
 		return err
 	}
-	defer os.Remove(temp.Name())
-	_, err = temp.Write(data)
-	if err == nil {
-		err = temp.Sync()
-	}
-	if closeErr := temp.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Chmod(temp.Name(), 0644)
-	}
-	if err != nil {
-		return err
-	}
-	return os.Rename(temp.Name(), p.file())
+	return os.Rename(temp, p.file())
 }
 
 func (p *Playlist) Snapshot() ([]string, string) {
@@ -109,9 +56,6 @@ func (p *Playlist) Snapshot() ([]string, string) {
 	return slices.Clone(p.names), p.playing
 }
 
-// Add moves the uploaded file at temp into place as name and appends it to the
-// playlist. Doing both under the lock stops two uploads of the same name from
-// overwriting each other.
 func (p *Playlist) Add(temp, name string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
