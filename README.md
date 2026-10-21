@@ -21,6 +21,7 @@ Then open http://localhost:8080.
 | `-media`   | `media`   | Directory videos are stored in           |
 | `-addr`    | `:8080`   | Address for the web interface            |
 | `-encoder` | `libx264` | ffmpeg H.264 encoder used for the output |
+| `-title`   | `Continuity` | Title shown on the web interface      |
 
 To build a single binary instead: `go build -o continuity .`
 

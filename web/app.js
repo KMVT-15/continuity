@@ -4,13 +4,17 @@ const drop = document.getElementById("drop");
 const now = document.getElementById("now");
 const messages = document.getElementById("messages");
 const preview = document.getElementById("preview");
+const confirmDialog = document.getElementById("confirm");
+const confirmName = document.getElementById("confirm-name");
 let dragging = null;
 
 const styles = {
-  info: "bg-zinc-800 text-zinc-300",
-  ok: "bg-green-900/50 text-green-200",
-  error: "bg-red-900/60 text-red-200",
+  info: "border-zinc-300",
+  ok: "border-kmvt-green",
+  error: "border-red-600 text-red-700",
 };
+
+const tag = "inline-flex h-7 items-center rounded border px-2.5 font-heading text-xs font-bold";
 
 async function load() {
   if (dragging) return;
@@ -24,8 +28,8 @@ function row(name, playing) {
   const li = document.createElement("li");
   li.draggable = true;
   li.dataset.name = name;
-  li.className = "flex cursor-move items-center gap-3 rounded-lg bg-zinc-800 px-4 py-3";
-  if (playing) li.classList.add("ring-2", "ring-red-500");
+  li.className = "flex cursor-move items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 hover:border-zinc-300";
+  if (playing) li.classList.add("bg-zinc-50");
 
   const label = document.createElement("span");
   label.className = "flex-1 truncate";
@@ -34,16 +38,16 @@ function row(name, playing) {
 
   if (playing) {
     const badge = document.createElement("span");
-    badge.className = "rounded bg-red-600 px-2 py-0.5 text-xs font-semibold";
-    badge.textContent = "ON AIR";
+    badge.className = tag + " border-red-600 bg-red-600 text-white";
+    badge.textContent = "On Air";
     li.append(badge);
   }
 
   const remove = document.createElement("button");
-  remove.className = "rounded px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100";
+  remove.className = tag + " border-zinc-300 text-zinc-600 hover:bg-zinc-100";
   remove.textContent = "Delete";
   remove.onclick = async () => {
-    if (!confirm(`Delete ${name}?`)) return;
+    if (!(await confirmDelete(name))) return;
     await send("DELETE", "/api/videos/" + encodeURIComponent(name));
     load();
   };
@@ -51,6 +55,19 @@ function row(name, playing) {
 
   return li;
 }
+
+function confirmDelete(name) {
+  confirmName.textContent = name;
+  confirmDialog.returnValue = "";
+  confirmDialog.showModal();
+  return new Promise(resolve => {
+    confirmDialog.addEventListener("close", () => resolve(confirmDialog.returnValue === "delete"), { once: true });
+  });
+}
+
+confirmDialog.addEventListener("click", e => {
+  if (e.target === confirmDialog) confirmDialog.close();
+});
 
 function message(text, style) {
   const li = document.createElement("li");
@@ -60,7 +77,7 @@ function message(text, style) {
 }
 
 function setMessage(li, text, style) {
-  li.className = "rounded-lg px-4 py-2 text-sm " + styles[style];
+  li.className = "rounded border-l-4 bg-zinc-50 px-4 py-2 text-sm " + styles[style];
   li.textContent = text;
 }
 
@@ -100,10 +117,10 @@ fileInput.addEventListener("change", async () => {
 window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("drop", e => e.preventDefault());
 
-drop.addEventListener("dragover", () => drop.classList.add("bg-zinc-800"));
-drop.addEventListener("dragleave", () => drop.classList.remove("bg-zinc-800"));
+drop.addEventListener("dragover", () => drop.classList.add("bg-zinc-50"));
+drop.addEventListener("dragleave", () => drop.classList.remove("bg-zinc-50"));
 drop.addEventListener("drop", e => {
-  drop.classList.remove("bg-zinc-800");
+  drop.classList.remove("bg-zinc-50");
   uploadAll(e.dataTransfer.files);
 });
 
@@ -123,7 +140,7 @@ function upload(file) {
   const bar = document.createElement("progress");
   bar.max = 100;
   bar.value = 0;
-  bar.className = "mt-2 block h-1.5 w-full";
+  bar.className = "mt-2 block h-1.5 w-full accent-kmvt-purple";
   item.append(bar);
 
   return new Promise(resolve => {

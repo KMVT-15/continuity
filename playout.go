@@ -35,6 +35,11 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 	if encoder == "libx264" {
 		video = append(video, "-preset", "veryfast", "-maxrate", "4500k", "-bufsize", "9000k")
 	}
+	if encoder == "h264_v4l2m2m" {
+		video = append(video, "-bsf:v", "extract_extradata")
+	} else {
+		video = append(video, "-flags:v", "+global_header")
+	}
 
 	args := []string{
 		"-hide_banner", "-loglevel", "warning",
@@ -47,8 +52,7 @@ func stream(output, encoder, previewDir string, playlist *Playlist) error {
 	args = append(args, video...)
 	args = append(args,
 		"-af", "aresample=async=1", "-ar", "48000",
-		"-c:a", "aac", "-b:a", "128k",
-		"-flags", "+global_header",
+		"-c:a", "aac", "-b:a", "128k", "-flags:a", "+global_header",
 		"-f", "tee", "[f=flv]"+output+"|"+preview,
 	)
 	ffmpeg := exec.Command("ffmpeg", args...)

@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"flag"
+	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -22,6 +23,7 @@ func main() {
 	dir := flag.String("media", "media", "directory to store videos in")
 	addr := flag.String("addr", ":8080", "address for the web interface")
 	encoder := flag.String("encoder", "libx264", "ffmpeg H.264 encoder, e.g. h264_v4l2m2m for the Raspberry Pi's hardware encoder")
+	title := flag.String("title", "Continuity", "title shown on the web interface")
 	flag.Parse()
 
 	if *output == "" {
@@ -101,6 +103,12 @@ func main() {
 			return
 		}
 		c.Status(http.StatusOK)
+	})
+
+	page := template.Must(template.ParseFS(web, "web/index.html"))
+	router.GET("/", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		page.Execute(c.Writer, *title)
 	})
 
 	files, _ := fs.Sub(web, "web")

@@ -3,36 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Continuity</title>
+  <title>{{.}}</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;700&display=swap">
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --color-kmvt-purple: #7a257a;
+      --color-kmvt-green: #009d84;
+      --font-heading: "brandon-grotesque", "Brandon Grotesque", "Jost", sans-serif;
+      --font-body: "futura-pt", "Futura PT", "Jost", sans-serif;
+    }
+  </style>
 </head>
-<body class="bg-zinc-900 text-zinc-100">
-  <main class="mx-auto max-w-2xl p-6 space-y-6">
-    <h1 class="text-2xl font-semibold">Continuity</h1>
+<body class="bg-white font-body text-zinc-800">
+  <main class="mx-auto max-w-2xl p-6 space-y-8">
+    <header class="flex items-center gap-5">
+      <img src="favicon.svg" alt="KMVT" class="h-10 w-10">
+      <h1 class="font-heading text-3xl font-bold text-zinc-900">{{.}}</h1>
+    </header>
 
-    <section class="flex flex-col gap-4 rounded-lg bg-zinc-800 p-4 sm:flex-row sm:items-center">
+    <section class="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-[#f5f4f2] p-4 sm:flex-row sm:items-center">
       <video id="preview" class="aspect-video w-full rounded bg-black sm:w-64" muted autoplay playsinline controls></video>
       <div class="min-w-0">
-        <p class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Now playing</p>
-        <p id="now" class="truncate text-lg">Nothing</p>
+        <h2 class="font-heading text-sm font-bold text-zinc-500">Now Playing</h2>
+        <p id="now" class="truncate text-xl text-zinc-900">Nothing</p>
       </div>
     </section>
 
-    <section class="space-y-2">
-      <label id="drop" class="block cursor-pointer rounded-lg border-2 border-dashed border-zinc-600 p-6 text-center hover:border-zinc-400">
+    <section class="space-y-3">
+      <h2 class="font-heading text-xl font-bold text-zinc-900">Upload</h2>
+      <label id="drop" class="block cursor-pointer rounded-lg border-2 border-dashed border-zinc-300 p-6 text-center text-zinc-500 hover:border-zinc-400">
         Drop MP4 files here or click to choose (H.264 + AAC)
         <input id="file" type="file" accept=".mp4,video/mp4" multiple class="hidden">
       </label>
       <ul id="messages" class="space-y-2"></ul>
     </section>
 
-    <section class="space-y-2">
-      <h2 class="text-lg font-semibold">Playlist</h2>
-      <p class="text-sm text-zinc-400">Drag to reorder. Changes take effect at the next clip.</p>
+    <section class="space-y-3">
+      <h2 class="font-heading text-xl font-bold text-zinc-900">Playlist</h2>
+      <p class="text-sm text-zinc-500">Drag to reorder. Changes take effect at the next clip.</p>
       <ul id="playlist" class="space-y-2"></ul>
     </section>
   </main>
+
+  <dialog id="confirm" class="m-auto w-full max-w-sm rounded-lg p-0 shadow-xl backdrop:bg-black/40">
+    <form method="dialog" class="space-y-4 p-6">
+      <h2 class="font-heading text-lg font-bold text-zinc-900">Delete Video</h2>
+      <p class="text-zinc-600">Delete <span id="confirm-name" class="font-bold text-zinc-900"></span> from the playlist and the server?</p>
+      <div class="flex justify-end gap-2">
+        <button value="cancel" class="h-9 rounded border border-zinc-300 px-4 font-heading text-sm font-bold text-zinc-600 hover:bg-zinc-100">Cancel</button>
+        <button value="delete" class="h-9 rounded border border-red-600 bg-red-600 px-4 font-heading text-sm font-bold text-white hover:bg-red-700">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
